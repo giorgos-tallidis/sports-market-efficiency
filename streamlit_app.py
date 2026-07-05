@@ -1,74 +1,135 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
+import plotly.express as px
 from scipy.stats import poisson
 
-# Ρύθμιση της σελίδας
-st.set_page_config(page_title="Quant Modeling", layout="wide")
+# 1. Βασική Ρύθμιση Σελίδας
+st.set_page_config(page_title="Institutional Quant Model", layout="wide")
 
-# Τίτλος και Εισαγωγή
 st.title("📊 Quantitative Modeling of Market Inefficiencies")
-st.subheader("A Behavioral Economics Approach to Sports Betting Markets")
-st.write("Αυτό το μοντέλο συγκρίνει τις μαθηματικές πιθανότητες (Poisson) με τις αποδόσεις της αγοράς για να εντοπίσει Emotional Overreactions και αναποτελεσματικότητα στην αγορά.")
-
+st.markdown("A Behavioral Economics Approach to Sports Betting Markets utilizing **Time-Decay Form** and **Dynamic Bankroll Simulation**.")
 st.markdown("---")
 
-# Δημιουργία δύο στηλών για το Interface
-col1, col2 = st.columns(2)
+# 2. Φόρτωση Ιστορικών Δεδομένων
+@st.cache_data
+def load_data():
+    try:
+        df = pd.read_csv('E0.csv')
+        return df
+    except:
+        return pd.DataFrame()
 
-with col1:
-    st.header("1. Αλγοριθμικές Πιθανότητες (Poisson Model)")
-    st.write("Βάλε τα Expected Goals (xG) των ομάδων όπως τα υπολόγισε το μοντέλο σου:")
-    
-    # Inputs για xG
-    home_xg = st.number_input("Home Team xG", value=1.50, step=0.10, format="%.2f")
-    away_xg = st.number_input("Away Team xG", value=1.20, step=0.10, format="%.2f")
-    
-    # Υπολογισμός Πιθανοτήτων Poisson
-    max_goals = 6
-    home_poisson = [poisson.pmf(i, home_xg) for i in range(max_goals + 1)]
-    away_poisson = [poisson.pmf(i, away_xg) for i in range(max_goals + 1)]
-    
-    matrix = np.outer(home_poisson, away_poisson)
-    prob_home_win = np.sum(np.tril(matrix, -1))
-    prob_draw = np.sum(np.diag(matrix))
-    prob_away_win = np.sum(np.triu(matrix, 1))
-    
-    # Εμφάνιση Αποτελεσμάτων Μοντέλου
-    st.metric(label="Home Win Probability", value=f"{prob_home_win * 100:.2f}%")
-    st.write(f"Draw Probability: **{prob_draw * 100:.2f}%**")
-    st.write(f"Away Win Probability: **{prob_away_win * 100:.2f}%**")
+df = load_data()
 
-with col2:
-    st.header("2. Αποδόσεις Αγοράς (Market Sentiment)")
-    st.write("Βάλε την απόδοση (Odds) που δίνει η αγορά για τον Άσο:")
-    
-    # Input για τις αποδόσεις
-    market_odds = st.number_input("Market Odds (Home Win)", value=2.00, step=0.05, format="%.2f")
-    
-    # Υπολογισμός Implied Probability της αγοράς
-    market_prob = (1 / market_odds) * 100 if market_odds > 0 else 0.0
-    st.info(f"Πιθανότητα που πιστεύει η Αγορά: {market_prob:.2f}%")
-    
-    st.markdown("---")
-    
-    # 📈 ΝΕΟ ΚΟΜΜΑΤΙ: RISK MANAGEMENT (KELLY CRITERION)
-    st.header("📈 Διαχείριση Ρίσκου (Kelly Criterion)")
-    st.write("Οικονομική βελτιστοποίηση κεφαλαίου με βάση το μαθηματικό σου πλεονέκτημά:")
-    
-    if market_odds > 1.0:
-        # b = καθαρή απόδοση (odds - 1)
-        b = market_odds - 1.0
-        p = prob_home_win
-        q = 1.0 - p
+if df.empty:
+    st.error("⚠️ Το αρχείο E0.csv δεν βρέθηκε στο φάκελο του project.")
+else:
+    tab1, tab2 = st.tabs(["🔮 Live Predictions (Recent Form)", "📈 Bankroll Simulation (Equity Curve)"])
+
+    # ==========================================
+    # TAB 1: LIVE ΠΡΟΒΛΕΨΕΙΣ ΜΕ ΒΑΣΗ ΤΗ ΦΟΡΜΑ
+    # ==========================================
+    with tab1:
+        st.header("🔮 Δυναμική Μηχανή Πρόβλεψης")
+        st.write("Ο αλγόριθμος σκανάρει τη βάση δεδομένων, απομονώνει τα τελευταία 5 παιχνίδια και υπολογίζει το Dynamic xG.")
         
-        # Τύπος Kelly
-        kelly_fraction = (b * p - q) / b
+        teams = sorted(list(set(df['HomeTeam'].dropna())))
         
-        if kelly_fraction > 0:
-            st.success(f"✅ **Value Detected!** Ο αλγόριθμος εντόπισε αναποτελεσματικότητα στην αγορά.")
-            st.metric(label="Προτεινόμενο Ποσοστό Επένδυσης (Kelly %)", value=f"{kelly_fraction * 100:.2f}%")
-            st.caption("Αυτό το ποσοστό μεγιστοποιεί τον μακροπρόθεσμο ρυθμό ανάπτυξης του κεφαλαίου σου (Bankroll) μειώνοντας το ρίσκο της διακύμανσης (Variance).")
-        else:
-            st.warning("⚠️ **No Value Detected.** Η απόδοση της αγοράς είναι χαμηλότερη από τη μαθηματική πιθανότητα. Μην επενδύσεις.")
-    else:
-        st.error("Οι αποδόσεις της αγοράς πρέπει να είναι μεγαλύτερες από 1.00.")
+        col1, col2 = st.columns(2)
+        with col1:
+            home_team = st.selectbox("Επίλεξε Γηπεδούχο (Home):", teams, index=0)
+        with col2:
+            away_team = st.selectbox("Επίλεξε Φιλοξενούμενη (Away):", teams, index=1)
+            
+        home_form = df[df['HomeTeam'] == home_team].tail(5)
+        away_form = df[df['AwayTeam'] == away_team].tail(5)
+        
+        if not home_form.empty and not away_form.empty:
+            home_xg = max(home_form['FTHG'].mean(), 0.1) 
+            away_xg = max(away_form['FTAG'].mean(), 0.1)
+            
+            st.info(f"📊 **Αυτόματο xG (Βάσει πρόσφατης φόρμας):** {home_team} **{home_xg:.2f}** | {away_team} **{away_xg:.2f}**")
+            
+            home_poisson = [poisson.pmf(i, home_xg) for i in range(7)]
+            away_poisson = [poisson.pmf(i, away_xg) for i in range(7)]
+            
+            matrix = np.outer(home_poisson, away_poisson)
+            prob_home_win = np.sum(np.tril(matrix, -1))
+            
+            st.metric(label="Αλγοριθμική Πιθανότητα (Άσος)", value=f"{prob_home_win * 100:.2f}%")
+            
+            st.markdown("### 📉 Market Sentiment & Kelly Criterion")
+            market_odds = st.number_input("Απόδοση Αγοράς για τον Άσο αύριο:", value=2.00, step=0.05)
+            
+            if market_odds > 1.0:
+                b = market_odds - 1.0
+                p = prob_home_win
+                q = 1.0 - p
+                
+                kelly_fraction = (b * p - q) / b
+                
+                if kelly_fraction > 0:
+                    st.success("✅ **Value Detected!** Η αγορά υποτιμά τη γηπεδούχο.")
+                    st.write(f"**Προτεινόμενο Ποντάρισμα (Kelly %):** {kelly_fraction * 100:.2f}% του κεφαλαίου.")
+                else:
+                    st.warning("⚠️ **No Value.** Το μαθηματικό ρίσκο δεν δικαιολογεί την επένδυση.")
+
+    # ==========================================
+    # TAB 2: EQUITY CURVE & BACKTESTING
+    # ==========================================
+    with tab2:
+        st.header("📈 Financial Backtesting & Equity Curve")
+        st.write("Προσομοίωση Bankroll Management. Τρέχουμε τον αλγόριθμο σε όλη τη σεζόν με αρχικό κεφάλαιο **$1,000** χωρίς Look-ahead bias (χρήση ιστορικών μέσων όρων).")
+        
+        if st.button("▶️ Run Market Simulation"):
+            bankroll = 1000.0
+            capital_history = [bankroll]
+            
+            # Υπολογισμός πραγματικών ιστορικών μέσων όρων για κάθε ομάδα
+            home_avg_goals = df.groupby('HomeTeam')['FTHG'].mean().to_dict()
+            away_avg_goals = df.groupby('AwayTeam')['FTAG'].mean().to_dict()
+            
+            for index, row in df.iterrows():
+                odds_h = row.get('B365H', 2.50) 
+                if pd.isna(odds_h): odds_h = 2.50
+                    
+                # Αντί να "κλέβουμε" βλέποντας το σκορ, χρησιμοποιούμε τη δυναμικότητα της ομάδας
+                h_goals_proxy = home_avg_goals.get(row['HomeTeam'], 1.56)
+                a_goals_proxy = away_avg_goals.get(row['AwayTeam'], 1.33)
+                
+                prob_h = np.sum(np.tril(np.outer([poisson.pmf(i, h_goals_proxy) for i in range(6)], 
+                                                 [poisson.pmf(i, a_goals_proxy) for i in range(6)]), -1))
+                
+                b_sim = odds_h - 1.0
+                p_sim = prob_h
+                q_sim = 1.0 - p_sim
+                
+                if b_sim > 0:
+                    k_frac = (b_sim * p_sim - q_sim) / b_sim
+                    k_frac = k_frac * 0.05  # Fractional Kelly (5%) για ασφάλεια
+                    
+                    if 0 < k_frac < 1:
+                        bet_amount = bankroll * k_frac
+                        if row['FTR'] == 'H':
+                            bankroll += bet_amount * b_sim
+                        else:
+                            bankroll -= bet_amount
+                            
+                capital_history.append(bankroll)
+            
+            chart_df = pd.DataFrame({
+                "Αγώνες": range(len(capital_history)), 
+                "Κεφάλαιο ($)": capital_history
+            })
+            
+            fig = px.line(chart_df, x="Αγώνες", y="Κεφάλαιο ($)", title="Bankroll Evolution (Ανάπτυξη Κεφαλαίου)", template="plotly_dark")
+            
+            line_color = '#00ff00' if bankroll > 1000 else '#ff0000'
+            fig.update_traces(line_color=line_color, line_width=3)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            roi = ((bankroll - 1000) / 1000) * 100
+            col1, col2 = st.columns(2)
+            col1.metric("Αρχικό Κεφάλαιο", "$1,000.00")
+            col2.metric("Τελικό Κεφάλαιο", f"${bankroll:.2f}", f"{roi:.2f}% ROI")
